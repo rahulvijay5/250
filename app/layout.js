@@ -7,6 +7,9 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata = {
   title: '250 Card Game Scoring App',
   description: 'Mobile-friendly scoring app for the 250/Partner card game with dynamic partnerships and flexible scoring rules',
+  icons: {
+    icon: '/favicon.ico',
+  },
 }
 
 export default function RootLayout({ children }) {

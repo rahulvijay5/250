@@ -691,7 +691,8 @@ const NewMatchScreen = () => {
           bidder: selectedBidder,
           partners: selectedPartners,
           bidAmount: parseInt(bidAmount),
-          won
+          won,
+          currentPlayers: selectedPlayers
         })
       });
 
@@ -878,8 +879,55 @@ const NewMatchScreen = () => {
   </CardHeader>
   <CardContent className="space-y-6">
     <div className="text-center p-4 bg-gray-50 rounded-lg">
-      <p className="text-sm text-gray-600 mb-2">Team:</p>
-      <div className="flex flex-wrap justify-center gap-2">
+      <p className="text-sm text-gray-600 mb-3">Team:</p>
+      
+      {/* Team Avatars */}
+      <div className="flex justify-center items-center mb-3">
+        <div className="relative">
+          {/* Bidder Avatar */}
+          <div className="relative z-10">
+            <Avatar className="w-16 h-16 border-4 border-yellow-400 shadow-lg">
+              <AvatarImage src={selectedBidder?.avatar} alt={selectedBidder?.name} />
+              <AvatarFallback className="bg-yellow-100 text-yellow-800 font-bold">
+                {selectedBidder?.name?.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="absolute -top-1 -right-1 bg-yellow-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
+              B
+            </div>
+          </div>
+          
+          {/* Partner Avatars */}
+          {selectedPartners.length > 0 ? (
+            selectedPartners.map((partner, index) => (
+              <div 
+                key={partner.id} 
+                className="absolute z-0"
+                style={{
+                  transform: `rotate(${index * 15 - 15}deg) translateX(${index * 20 + index * 20}px)`,
+                  transformOrigin: 'left center'
+                }}
+              >
+                <Avatar className="w-12 h-12 border-2 border-blue-400 shadow-md">
+                  <AvatarImage src={partner.avatar} alt={partner.name} />
+                  <AvatarFallback className="bg-blue-100 text-blue-800 font-bold text-xs">
+                    {partner.name?.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+            ))
+          ) : (
+            <div className="absolute z-0 transform rotate-12 translate-x-6">
+              <div className="w-12 h-12 border-2 border-gray-400 rounded-full bg-gray-100 flex items-center justify-center shadow-md">
+                <span className="text-gray-500 text-xs font-bold">SOLO</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Team Names */}
+      <div className="flex flex-wrap justify-center gap-2 mt-16">
         <Badge className="bg-yellow-100 text-yellow-800">
           {selectedBidder?.name} (Bidder)
         </Badge>
@@ -1473,8 +1521,8 @@ const ViewTotalsScreen = () => {
                             <div className="flex flex-wrap gap-1">
                               {match.partners.length > 0 ? (
                                 match.partners.map((partner, index) => (
-                                  <span key={partner.id} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                    {partner.name}
+                                  <span key={partner.player?.id || partner.id} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                    {partner.player?.name || partner.name}
                                   </span>
                                 ))
                               ) : (
@@ -1497,14 +1545,17 @@ const ViewTotalsScreen = () => {
                           </td>
                           <td className="py-3 px-3 text-center">
                             <div className="text-xs space-y-1">
-                              {match.scores && match.scores.slice(0, 3).map((score) => (
+                              {match.scores && match.scores
+                                .filter(score => score.score > 0)
+                                .slice(0, 3)
+                                .map((score) => (
                                 <div key={score.player.id} className="flex justify-between gap-2">
                                   <span className="truncate max-w-16">{score.player.name}</span>
-                                  <span className="font-medium">{score.score}</span>
+                                  <span className="font-medium text-green-600">{score.score}</span>
                                 </div>
                               ))}
-                              {match.scores && match.scores.length > 3 && (
-                                <div className="text-gray-500">+{match.scores.length - 3} more</div>
+                              {match.scores && match.scores.filter(score => score.score > 0).length > 3 && (
+                                <div className="text-gray-500">+{match.scores.filter(score => score.score > 0).length - 3} more</div>
                               )}
                             </div>
                           </td>
@@ -1662,7 +1713,8 @@ const EndGameScreen = () => {
   const shareResults = () => {
     if (navigator.share && rankings.length > 0) {
       const winner = rankings[0];
-      const shareText = `🏆 Winner: ${winner.player.name} with ${winner.totalPoints} points!\n\n📊 Final Standings:\n${rankings.map((entry, index) => `${index + 1}. ${entry.player.name} - ${entry.totalPoints} pts`).join('\n')}\n\n🎮 ${totalMatches} matches played at ${gameData?.location || 'Game Night'}`;
+      const gameDate = gameData?.date ? new Date(gameData.date).toLocaleDateString() : new Date().toLocaleDateString();
+      const shareText = `🏆 Winner: ${winner.player.name} with ${winner.totalPoints} points!\n\n📊 Final Standings:\n${rankings.map((entry, index) => `${index + 1}. ${entry.player.name} - ${entry.totalPoints} pts`).join('\n')}\n\n🎮 ${totalMatches} matches played at ${gameData?.location || 'Game Night'}\n📅 ${gameDate}`;
       
       navigator.share({
         title: '250 Card Game Results! 🎉',
@@ -1671,7 +1723,8 @@ const EndGameScreen = () => {
     } else {
       // Fallback: copy to clipboard
       const winner = rankings[0];
-      const shareText = `🎉 250 Card Game Results!\n\n🏆 Winner: ${winner.player.name} with ${winner.totalPoints} points!\n\n📊 Final Standings:\n${rankings.slice(0, 3).map((entry, index) => `${index + 1}. ${entry.player.name} - ${entry.totalPoints} pts`).join('\n')}\n\n🎮 ${totalMatches} matches played at ${gameData?.location || 'Game Night'}`;
+      const gameDate = gameData?.date ? new Date(gameData.date).toLocaleDateString() : new Date().toLocaleDateString();
+      const shareText = `🎉 250 Card Game Results!\n\n🏆 Winner: ${winner.player.name} with ${winner.totalPoints} points!\n\n📊 Final Standings:\n${rankings.slice(0, 3).map((entry, index) => `${index + 1}. ${entry.player.name} - ${entry.totalPoints} pts`).join('\n')}\n\n🎮 ${totalMatches} matches played at ${gameData?.location || 'Game Night'}\n📅 ${gameDate}`;
       
       navigator.clipboard.writeText(shareText).then(() => {
         alert('Results copied to clipboard!');

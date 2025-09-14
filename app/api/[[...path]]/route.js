@@ -141,7 +141,7 @@ const gameRoutes = {
 
   // Add match to game
   'POST /api/games/:gameId/matches': async (request, gameId) => {
-    const { bidder, partners, bidAmount, won } = await request.json();
+    const { bidder, partners, bidAmount, won, currentPlayers } = await request.json();
     
     const game = await prisma.game.findUnique({
       where: { id: gameId },
@@ -162,8 +162,8 @@ const gameRoutes = {
       where: { gameId }
     }) + 1;
     
-    // Get all players in the game
-    const allPlayers = game.players.map(gp => gp.player);
+    // Use current players if provided, otherwise fall back to original game players
+    const allPlayers = currentPlayers || game.players.map(gp => gp.player);
     const nonPartners = allPlayers.filter(p => 
       p.id !== bidder.id && !partners.some(partner => partner.id === p.id)
     );
@@ -404,7 +404,9 @@ const locationRoutes = {
     // Default locations
     const defaultLocations = ['Farmhouse', 'Atishay\'s Home', 'Tisha\'s Home'];
     const customLocations = locations.map(loc => loc.name);
-    const allLocations = [...defaultLocations, ...customLocations];
+    
+    // Combine and remove duplicates
+    const allLocations = [...new Set([...defaultLocations, ...customLocations])];
     
     return NextResponse.json({ locations: allLocations });
   },

@@ -1,0 +1,30 @@
+250 CARD GAME - FINAL RESULTS
+=====================================
+
+Game Details:
+Location: Farmhouse
+Date: 15/09/2025
+Players: 8
+Matches Played: 2
+Duration: N/A
+
+FINAL STANDINGS:
+================
+1. Player 2 - 435 points (2W/0L)
+2. Player 6 - 350 points (1W/0L)
+3. Player 4 - 285 points (1W/0L)
+4. Player 3 - 250 points (1W/0L)
+5. Atishay - 185 points (1W/0L)
+6. Player 5 - 0 points (0W/0L)
+7. Tisha - 0 points (0W/0L)
+8. rahul - 0 points (0W/0L)
+
+MATCH HISTORY:
+==============
+Match | Bidder | Partners | Bid | Result | Scores
+------|--------|----------|-----|--------|--------
+#2 | Player 6 | ,  | 250 | WON | Player 6: 350, Player 3: 250, Player 2: 250, Atishay: 0, Player 4: 0, Tisha: 0, rahul: 0, Player 5: 0
+#1 | Player 4 | ,  | 185 | WON | Player 4: 285, Player 2: 185, Atishay: 185, Player 3: 0, Player 6: 0, Tisha: 0, rahul: 0, Player 5: 0
+
+
+Generated on 15/09/2025, 03:52:34
