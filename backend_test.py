@@ -10,8 +10,8 @@ import time
 import sys
 from datetime import datetime
 
-# Get base URL from environment
-BASE_URL = "https://card-tracker-10.preview.emergentagent.com/api"
+# Get base URL from environment - using local URL since external routing has issues
+BASE_URL = "http://localhost:3000/api"
 
 class CardGameAPITester:
     def __init__(self):
