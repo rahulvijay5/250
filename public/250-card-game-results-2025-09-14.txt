@@ -1,0 +1,26 @@
+250 CARD GAME - FINAL RESULTS
+=====================================
+
+Game Details:
+Location: Atishay's Home
+Date: 15/09/2025
+Players: 4
+Matches Played: 2
+Duration: N/A
+
+FINAL STANDINGS:
+================
+1. Player 4 - 310 points (1W/0L)
+2. eklavya - 235 points (1W/1L)
+3. Atishay - 175 points (0W/0L)
+4. Player 1 - 0 points (0W/1L)
+
+MATCH HISTORY:
+==============
+Match | Bidder | Partners | Bid | Result | Scores
+------|--------|----------|-----|--------|--------
+#2 | eklavya |  | 135 | WON | eklavya: 235, Player 4: 135, Atishay: 0, Player 1: 0
+#1 | Player 1 |  | 175 | LOST | Player 1: 0, eklavya: 0, Atishay: 175, Player 4: 175
+
+
+Generated on 15/09/2025, 03:32:22

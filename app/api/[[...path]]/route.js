@@ -63,6 +63,41 @@ const gameRoutes = {
     return NextResponse.json({ game: activeGame });
   },
 
+  // Get specific game by ID
+  'GET /api/games/:gameId': async (request, gameId) => {
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      include: {
+        players: {
+          include: {
+            player: true
+          }
+        },
+        matches: {
+          include: {
+            bidder: true,
+            partners: {
+              include: {
+                player: true
+              }
+            },
+            scores: {
+              include: {
+                player: true
+              }
+            }
+          }
+        }
+      }
+    });
+    
+    if (!game) {
+      return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+    }
+    
+    return NextResponse.json({ game });
+  },
+
   // Create new game
   'POST /api/games': async (request) => {
     const { location, players } = await request.json();
@@ -136,14 +171,22 @@ const gameRoutes = {
     // Calculate scores
     const scores = [];
     if (won) {
-      // Bidder gets bid + 100, partners get bid amount, non-partners get 0
-      scores.push({ playerId: bidder.id, score: bidAmount + 100 });
-      partners.forEach(partner => {
-        scores.push({ playerId: partner.id, score: bidAmount });
-      });
-      nonPartners.forEach(player => {
-        scores.push({ playerId: player.id, score: 0 });
-      });
+      if (partners.length === 0) {
+        // Solo player case: bidder gets bid amount only (not bid + 100)
+        scores.push({ playerId: bidder.id, score: bidAmount });
+        nonPartners.forEach(player => {
+          scores.push({ playerId: player.id, score: 0 });
+        });
+      } else {
+        // Normal case: bidder gets bid + 100, partners get bid amount, non-partners get 0
+        scores.push({ playerId: bidder.id, score: bidAmount + 100 });
+        partners.forEach(partner => {
+          scores.push({ playerId: partner.id, score: bidAmount });
+        });
+        nonPartners.forEach(player => {
+          scores.push({ playerId: player.id, score: 0 });
+        });
+      }
     } else {
       // Bidder and partners get 0, non-partners get bid amount
       scores.push({ playerId: bidder.id, score: 0 });
@@ -221,12 +264,36 @@ const gameRoutes = {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
     
+    // Get all unique players who have ever participated in this game
+    const allPlayerIds = new Set();
+    
+    // Add players from game setup
+    game.players.forEach(gp => {
+      allPlayerIds.add(gp.player.id);
+    });
+    
+    // Add players from all matches (bidder, partners, and anyone who scored)
+    game.matches.forEach(match => {
+      allPlayerIds.add(match.bidder.id);
+      match.partners.forEach(p => allPlayerIds.add(p.player.id));
+      match.scores.forEach(score => allPlayerIds.add(score.player.id));
+    });
+    
+    // Fetch all unique players
+    const allPlayers = await prisma.player.findMany({
+      where: {
+        id: {
+          in: Array.from(allPlayerIds)
+        }
+      }
+    });
+    
     const totals = {};
     
-    // Initialize totals for all players
-    game.players.forEach(gp => {
-      totals[gp.player.id] = {
-        player: gp.player,
+    // Initialize totals for all players who have ever participated
+    allPlayers.forEach(player => {
+      totals[player.id] = {
+        player: player,
         totalPoints: 0,
         matchesWon: 0,
         matchesLost: 0
@@ -289,11 +356,21 @@ const playerRoutes = {
       return NextResponse.json({ error: 'Player name must be at least 2 characters' }, { status: 400 });
     }
     
+    // Capitalize name properly
+    const capitalizeName = (str) => {
+      return str.trim()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    };
+    
+    const capitalizedName = capitalizeName(name);
+    
     // Check if player already exists
     const existingPlayer = await prisma.player.findFirst({
       where: { 
         name: {
-          equals: name.trim(),
+          equals: capitalizedName,
           mode: 'insensitive'
         }
       }
@@ -303,11 +380,11 @@ const playerRoutes = {
       return NextResponse.json({ error: 'Player with this name already exists' }, { status: 409 });
     }
     
-    const avatarUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name.trim())}`;
+    const avatarUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(capitalizedName)}`;
     
     const newPlayer = await prisma.player.create({
       data: {
-        name: name.trim(),
+        name: capitalizedName,
         avatar: avatarUrl
       }
     });
@@ -392,6 +469,9 @@ export async function GET(request, { params }) {
       }
       if (segments[0] === 'games' && segments[1] && segments[2] === 'end') {
         return await gameRoutes['PUT /api/games/:gameId/end'](request, segments[1]);
+      }
+      if (segments[0] === 'games' && segments[1] && !segments[2]) {
+        return await gameRoutes['GET /api/games/:gameId'](request, segments[1]);
       }
     }
     
