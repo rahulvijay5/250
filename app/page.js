@@ -930,8 +930,8 @@ const EndGameScreen = () => {
   );
 };
 
-// Main App Component
-const App = () => {
+// Game Router Component (uses the context)
+const GameRouter = () => {
   const { currentScreen } = useGame();
 
   const renderScreen = () => {
@@ -957,9 +957,14 @@ const App = () => {
     }
   };
 
+  return renderScreen();
+};
+
+// Main App Component (provides the context)
+const App = () => {
   return (
     <GameProvider>
-      {renderScreen()}
+      <GameRouter />
     </GameProvider>
   );
 };
