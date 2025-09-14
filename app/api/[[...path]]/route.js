@@ -1,33 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { MongoClient } from 'mongodb';
-import { v4 as uuidv4 } from 'uuid';
-
-let cachedClient = null;
-
-async function connectToMongoDB() {
-  if (cachedClient) {
-    return cachedClient;
-  }
-  
-  const client = new MongoClient(process.env.MONGO_URL);
-  await client.connect();
-  cachedClient = client;
-  return client;
-}
+import { prisma } from '@/lib/prisma';
 
 // Game state management endpoints
 const gameRoutes = {
   // Get all games
   'GET /api/games': async () => {
-    const client = await connectToMongoDB();
-    const games = await client.db('cardgame').collection('games').find({}).toArray();
+    const games = await prisma.game.findMany({
+      include: {
+        players: {
+          include: {
+            player: true
+          }
+        },
+        matches: {
+          include: {
+            bidder: true,
+            partners: {
+              include: {
+                player: true
+              }
+            },
+            scores: {
+              include: {
+                player: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
     return NextResponse.json({ games });
   },
 
   // Get active game
   'GET /api/games/active': async () => {
-    const client = await connectToMongoDB();
-    const activeGame = await client.db('cardgame').collection('games').findOne({ isActive: true });
+    const activeGame = await prisma.game.findFirst({
+      where: { isActive: true },
+      include: {
+        players: {
+          include: {
+            player: true
+          }
+        },
+        matches: {
+          include: {
+            bidder: true,
+            partners: {
+              include: {
+                player: true
+              }
+            },
+            scores: {
+              include: {
+                player: true
+              }
+            }
+          }
+        }
+      }
+    });
     return NextResponse.json({ game: activeGame });
   },
 
@@ -35,29 +67,40 @@ const gameRoutes = {
   'POST /api/games': async (request) => {
     const { location, players } = await request.json();
     
-    const client = await connectToMongoDB();
-    
     // Deactivate any existing active games
-    await client.db('cardgame').collection('games').updateMany(
-      { isActive: true },
-      { $set: { isActive: false } }
-    );
+    await prisma.game.updateMany({
+      where: { isActive: true },
+      data: { isActive: false }
+    });
     
-    const gameId = uuidv4();
+    // Ensure location exists in database
+    await prisma.location.upsert({
+      where: { name: location },
+      update: {},
+      create: { name: location }
+    });
+    
     const partnerCount = players.length <= 5 ? 2 : 3; // 2 partners for 4-5 players, 3 for 6+
     
-    const newGame = {
-      id: gameId,
-      location,
-      date: new Date(),
-      players,
-      partnerCount,
-      matches: [],
-      isActive: true,
-      createdAt: new Date()
-    };
+    const newGame = await prisma.game.create({
+      data: {
+        location,
+        partnerCount,
+        players: {
+          create: players.map(player => ({
+            playerId: player.id
+          }))
+        }
+      },
+      include: {
+        players: {
+          include: {
+            player: true
+          }
+        }
+      }
+    });
     
-    await client.db('cardgame').collection('games').insertOne(newGame);
     return NextResponse.json({ game: newGame });
   },
 
@@ -65,88 +108,146 @@ const gameRoutes = {
   'POST /api/games/:gameId/matches': async (request, gameId) => {
     const { bidder, partners, bidAmount, won } = await request.json();
     
-    const client = await connectToMongoDB();
-    const game = await client.db('cardgame').collection('games').findOne({ id: gameId });
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      include: {
+        players: {
+          include: {
+            player: true
+          }
+        }
+      }
+    });
     
     if (!game) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
     
-    const matchId = uuidv4();
-    const nonPartners = game.players.filter(p => p.id !== bidder.id && !partners.some(partner => partner.id === p.id));
+    const matchNumber = await prisma.match.count({
+      where: { gameId }
+    }) + 1;
+    
+    // Get all players in the game
+    const allPlayers = game.players.map(gp => gp.player);
+    const nonPartners = allPlayers.filter(p => 
+      p.id !== bidder.id && !partners.some(partner => partner.id === p.id)
+    );
     
     // Calculate scores
-    const scores = {};
+    const scores = [];
     if (won) {
       // Bidder gets bid + 100, partners get bid amount, non-partners get 0
-      scores[bidder.id] = bidAmount + 100;
+      scores.push({ playerId: bidder.id, score: bidAmount + 100 });
       partners.forEach(partner => {
-        scores[partner.id] = bidAmount;
+        scores.push({ playerId: partner.id, score: bidAmount });
       });
       nonPartners.forEach(player => {
-        scores[player.id] = 0;
+        scores.push({ playerId: player.id, score: 0 });
       });
     } else {
       // Bidder and partners get 0, non-partners get bid amount
-      scores[bidder.id] = 0;
+      scores.push({ playerId: bidder.id, score: 0 });
       partners.forEach(partner => {
-        scores[partner.id] = 0;
+        scores.push({ playerId: partner.id, score: 0 });
       });
       nonPartners.forEach(player => {
-        scores[player.id] = bidAmount;
+        scores.push({ playerId: player.id, score: bidAmount });
       });
     }
     
-    const newMatch = {
-      id: matchId,
-      matchNumber: game.matches.length + 1,
-      bidder,
-      partners,
-      nonPartners,
-      bidAmount,
-      won,
-      scores,
-      timestamp: new Date()
-    };
-    
-    await client.db('cardgame').collection('games').updateOne(
-      { id: gameId },
-      { $push: { matches: newMatch } }
-    );
+    const newMatch = await prisma.match.create({
+      data: {
+        gameId,
+        matchNumber,
+        bidderId: bidder.id,
+        bidAmount,
+        won,
+        partners: {
+          create: partners.map(partner => ({
+            playerId: partner.id
+          }))
+        },
+        scores: {
+          create: scores
+        }
+      },
+      include: {
+        bidder: true,
+        partners: {
+          include: {
+            player: true
+          }
+        },
+        scores: {
+          include: {
+            player: true
+          }
+        }
+      }
+    });
     
     return NextResponse.json({ match: newMatch });
   },
 
   // Get game totals
   'GET /api/games/:gameId/totals': async (request, gameId) => {
-    const client = await connectToMongoDB();
-    const game = await client.db('cardgame').collection('games').findOne({ id: gameId });
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      include: {
+        players: {
+          include: {
+            player: true
+          }
+        },
+        matches: {
+          include: {
+            bidder: true,
+            partners: {
+              include: {
+                player: true
+              }
+            },
+            scores: {
+              include: {
+                player: true
+              }
+            }
+          }
+        }
+      }
+    });
     
     if (!game) {
       return NextResponse.json({ error: 'Game not found' }, { status: 404 });
     }
     
     const totals = {};
-    game.players.forEach(player => {
-      totals[player.id] = {
-        player,
+    
+    // Initialize totals for all players
+    game.players.forEach(gp => {
+      totals[gp.player.id] = {
+        player: gp.player,
         totalPoints: 0,
         matchesWon: 0,
         matchesLost: 0
       };
     });
     
+    // Calculate totals from matches
     game.matches.forEach(match => {
-      Object.keys(match.scores).forEach(playerId => {
-        if (totals[playerId]) {
-          totals[playerId].totalPoints += match.scores[playerId];
+      match.scores.forEach(score => {
+        if (totals[score.player.id]) {
+          totals[score.player.id].totalPoints += score.score;
           
           // Track wins/losses for bidder and partners
-          if (playerId === match.bidder.id || match.partners.some(p => p.id === playerId)) {
+          const isBidderOrPartner = score.player.id === match.bidder.id || 
+            match.partners.some(p => p.player.id === score.player.id);
+          
+          if (isBidderOrPartner) {
             if (match.won) {
-              totals[playerId].matchesWon++;
+              totals[score.player.id].matchesWon++;
             } else {
-              totals[playerId].matchesLost++;
+              totals[score.player.id].matchesLost++;
             }
           }
         }
@@ -159,11 +260,13 @@ const gameRoutes = {
 
   // End game
   'PUT /api/games/:gameId/end': async (request, gameId) => {
-    const client = await connectToMongoDB();
-    await client.db('cardgame').collection('games').updateOne(
-      { id: gameId },
-      { $set: { isActive: false, endedAt: new Date() } }
-    );
+    await prisma.game.update({
+      where: { id: gameId },
+      data: { 
+        isActive: false, 
+        endedAt: new Date() 
+      }
+    });
     return NextResponse.json({ success: true });
   }
 };
@@ -172,8 +275,9 @@ const gameRoutes = {
 const playerRoutes = {
   // Get all players
   'GET /api/players': async () => {
-    const client = await connectToMongoDB();
-    const players = await client.db('cardgame').collection('players').find({}).sort({ name: 1 }).toArray();
+    const players = await prisma.player.findMany({
+      orderBy: { name: 'asc' }
+    });
     return NextResponse.json({ players });
   },
 
@@ -185,28 +289,29 @@ const playerRoutes = {
       return NextResponse.json({ error: 'Player name must be at least 2 characters' }, { status: 400 });
     }
     
-    const client = await connectToMongoDB();
-    
     // Check if player already exists
-    const existingPlayer = await client.db('cardgame').collection('players').findOne({ 
-      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') } 
+    const existingPlayer = await prisma.player.findFirst({
+      where: { 
+        name: {
+          equals: name.trim(),
+          mode: 'insensitive'
+        }
+      }
     });
     
     if (existingPlayer) {
       return NextResponse.json({ error: 'Player with this name already exists' }, { status: 409 });
     }
     
-    const playerId = uuidv4();
     const avatarUrl = `https://api.dicebear.com/7.x/adventurer/svg?seed=${encodeURIComponent(name.trim())}`;
     
-    const newPlayer = {
-      id: playerId,
-      name: name.trim(),
-      avatar: avatarUrl,
-      dateAdded: new Date()
-    };
+    const newPlayer = await prisma.player.create({
+      data: {
+        name: name.trim(),
+        avatar: avatarUrl
+      }
+    });
     
-    await client.db('cardgame').collection('players').insertOne(newPlayer);
     return NextResponse.json({ player: newPlayer });
   }
 };
@@ -215,8 +320,9 @@ const playerRoutes = {
 const locationRoutes = {
   // Get all locations
   'GET /api/locations': async () => {
-    const client = await connectToMongoDB();
-    const locations = await client.db('cardgame').collection('locations').find({}).sort({ name: 1 }).toArray();
+    const locations = await prisma.location.findMany({
+      orderBy: { name: 'asc' }
+    });
     
     // Default locations
     const defaultLocations = ['Farmhouse', 'Atishay\'s Home', 'Tisha\'s Home'];
@@ -234,25 +340,26 @@ const locationRoutes = {
       return NextResponse.json({ error: 'Location name must be at least 2 characters' }, { status: 400 });
     }
     
-    const client = await connectToMongoDB();
-    
     // Check if location already exists
-    const existingLocation = await client.db('cardgame').collection('locations').findOne({ 
-      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') } 
+    const existingLocation = await prisma.location.findFirst({
+      where: { 
+        name: {
+          equals: name.trim(),
+          mode: 'insensitive'
+        }
+      }
     });
     
     if (existingLocation) {
       return NextResponse.json({ error: 'Location already exists' }, { status: 409 });
     }
     
-    const locationId = uuidv4();
-    const newLocation = {
-      id: locationId,
-      name: name.trim(),
-      dateAdded: new Date()
-    };
+    const newLocation = await prisma.location.create({
+      data: {
+        name: name.trim()
+      }
+    });
     
-    await client.db('cardgame').collection('locations').insertOne(newLocation);
     return NextResponse.json({ location: newLocation });
   }
 };
@@ -279,6 +386,12 @@ export async function GET(request, { params }) {
       const segments = path.split('/');
       if (segments[0] === 'games' && segments[1] && segments[2] === 'totals') {
         return await gameRoutes['GET /api/games/:gameId/totals'](request, segments[1]);
+      }
+      if (segments[0] === 'games' && segments[1] && segments[2] === 'matches') {
+        return await gameRoutes['POST /api/games/:gameId/matches'](request, segments[1]);
+      }
+      if (segments[0] === 'games' && segments[1] && segments[2] === 'end') {
+        return await gameRoutes['PUT /api/games/:gameId/end'](request, segments[1]);
       }
     }
     

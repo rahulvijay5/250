@@ -1,0 +1,112 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Player {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  avatar    String?
+  dateAdded DateTime @default(now())
+  
+  // Relations
+  gamesAsPlayer GamePlayer[]
+  matchesAsBidder Match[] @relation("BidderMatches")
+  matchPartners  MatchPartner[]
+  matchScores    MatchScore[]
+  
+  @@map("players")
+}
+
+model Location {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  dateAdded DateTime @default(now())
+  
+  // Relations
+  games Game[]
+  
+  @@map("locations")
+}
+
+model Game {
+  id           String   @id @default(cuid())
+  location     String
+  date         DateTime @default(now())
+  partnerCount Int      @default(2)
+  isActive     Boolean  @default(true)
+  endedAt      DateTime?
+  createdAt    DateTime @default(now())
+  
+  // Relations
+  players GamePlayer[]
+  matches Match[]
+  locationRef Location @relation(fields: [location], references: [name])
+  
+  @@map("games")
+}
+
+model GamePlayer {
+  id       String @id @default(cuid())
+  gameId   String
+  playerId String
+  
+  // Relations
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  
+  @@unique([gameId, playerId])
+  @@map("game_players")
+}
+
+model Match {
+  id          String   @id @default(cuid())
+  gameId      String
+  matchNumber Int
+  bidderId    String
+  bidAmount   Int
+  won         Boolean
+  timestamp   DateTime @default(now())
+  
+  // Relations
+  game        Game           @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  bidder      Player         @relation("BidderMatches", fields: [bidderId], references: [id])
+  partners    MatchPartner[]
+  scores      MatchScore[]
+  
+  @@map("matches")
+}
+
+model MatchPartner {
+  id       String @id @default(cuid())
+  matchId  String
+  playerId String
+  
+  // Relations
+  match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id])
+  
+  @@unique([matchId, playerId])
+  @@map("match_partners")
+}
+
+model MatchScore {
+  id       String @id @default(cuid())
+  matchId  String
+  playerId String
+  score    Int    @default(0)
+  
+  // Relations
+  match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id])
+  
+  @@unique([matchId, playerId])
+  @@map("match_scores")
+}

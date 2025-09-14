@@ -20,6 +20,7 @@ const GameProvider = ({ children }) => {
   const [players, setPlayers] = useState([]);
   const [locations, setLocations] = useState([]);
   const [selectedPlayers, setSelectedPlayers] = useState([]);
+  const [selectedLocation, setSelectedLocation] = useState('');
 
   return (
     <GameContext.Provider value={{
@@ -27,7 +28,8 @@ const GameProvider = ({ children }) => {
       gameData, setGameData,
       players, setPlayers,
       locations, setLocations,
-      selectedPlayers, setSelectedPlayers
+      selectedPlayers, setSelectedPlayers,
+      selectedLocation, setSelectedLocation
     }}>
       {children}
     </GameContext.Provider>
@@ -44,8 +46,7 @@ const useGame = () => {
 
 // Game Setup Screen
 const GameSetupScreen = () => {
-  const { setCurrentScreen, locations, setLocations } = useGame();
-  const [selectedLocation, setSelectedLocation] = useState('');
+  const { setCurrentScreen, locations, setLocations, selectedLocation, setSelectedLocation } = useGame();
   const [newLocationName, setNewLocationName] = useState('');
   const [showAddLocation, setShowAddLocation] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -352,7 +353,7 @@ const PlayerSelectionScreen = () => {
 
 // Partnership Confirmation Screen
 const PartnershipConfirmationScreen = () => {
-  const { setCurrentScreen, selectedPlayers, setGameData } = useGame();
+  const { setCurrentScreen, selectedPlayers, setGameData, selectedLocation } = useGame();
   const [customPartnerCount, setCustomPartnerCount] = useState('');
   const [showCustom, setShowCustom] = useState(false);
 
@@ -365,7 +366,7 @@ const PartnershipConfirmationScreen = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          location: 'Selected Location', // This should come from previous screen
+          location: selectedLocation,
           players: selectedPlayers
         })
       });
