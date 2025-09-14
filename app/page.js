@@ -1081,16 +1081,348 @@ const ViewTotalsScreen = () => {
 };
 
 const EndGameScreen = () => {
-  const { setCurrentScreen } = useGame();
+  const { setCurrentScreen, gameData, selectedPlayers } = useGame();
+  const [rankings, setRankings] = useState([]);
+  const [totalMatches, setTotalMatches] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [gameEnded, setGameEnded] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  useEffect(() => {
+    if (gameData?.id) {
+      fetchTotals();
+    }
+  }, [gameData]);
+
+  const fetchTotals = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/games/${gameData.id}/totals`);
+      if (response.ok) {
+        const data = await response.json();
+        setRankings(data.rankings || []);
+        setTotalMatches(data.totalMatches || 0);
+      } else {
+        console.error('Failed to fetch totals');
+      }
+    } catch (error) {
+      console.error('Error fetching totals:', error);
+    }
+    setLoading(false);
+  };
+
+  const handleEndGame = async () => {
+    try {
+      const response = await fetch(`/api/games/${gameData.id}/end`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (response.ok) {
+        setGameEnded(true);
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 3000);
+      } else {
+        alert('Failed to end game');
+      }
+    } catch (error) {
+      console.error('Error ending game:', error);
+      alert('Failed to end game');
+    }
+  };
+
+  const exportToPDF = () => {
+    // Generate PDF content
+    const gameStats = {
+      location: gameData?.location || 'Unknown',
+      date: new Date(gameData?.date).toLocaleDateString() || new Date().toLocaleDateString(),
+      totalPlayers: selectedPlayers.length,
+      totalMatches: totalMatches,
+      duration: gameData?.matches?.length > 0 
+        ? `${Math.round((new Date() - new Date(gameData.date)) / (1000 * 60))} minutes`
+        : 'N/A'
+    };
+
+    // Create downloadable text file (PDF functionality would require a library like jsPDF)
+    const content = generateGameReport(gameStats, rankings, gameData?.matches || []);
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `250-card-game-results-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const generateGameReport = (stats, rankings, matches) => {
+    let report = `250 CARD GAME - FINAL RESULTS\n`;
+    report += `=====================================\n\n`;
+    report += `Game Details:\n`;
+    report += `Location: ${stats.location}\n`;
+    report += `Date: ${stats.date}\n`;
+    report += `Players: ${stats.totalPlayers}\n`;
+    report += `Matches Played: ${stats.totalMatches}\n`;
+    report += `Duration: ${stats.duration}\n\n`;
+    
+    report += `FINAL STANDINGS:\n`;
+    report += `================\n`;
+    rankings.forEach((entry, index) => {
+      report += `${index + 1}. ${entry.player.name} - ${entry.totalPoints} points (${entry.matchesWon}W/${entry.matchesLost}L)\n`;
+    });
+    
+    report += `\nMATCH HISTORY:\n`;
+    report += `==============\n`;
+    matches.forEach((match) => {
+      const partnerNames = match.partners.map(p => p.name).join(', ');
+      report += `Match ${match.matchNumber}: ${match.bidder.name} + ${partnerNames} bid ${match.bidAmount} - ${match.won ? 'WON' : 'LOST'}\n`;
+    });
+    
+    report += `\n\nGenerated on ${new Date().toLocaleString()}\n`;
+    return report;
+  };
+
+  const shareResults = () => {
+    if (navigator.share && rankings.length > 0) {
+      const winner = rankings[0];
+      const shareText = `🎉 250 Card Game Results!\n\n🏆 Winner: ${winner.player.name} with ${winner.totalPoints} points!\n\n📊 Final Standings:\n${rankings.slice(0, 3).map((entry, index) => `${index + 1}. ${entry.player.name} - ${entry.totalPoints} pts`).join('\n')}\n\n🎮 ${totalMatches} matches played at ${gameData?.location || 'Game Night'}`;
+      
+      navigator.share({
+        title: '250 Card Game Results',
+        text: shareText
+      }).catch(console.error);
+    } else {
+      // Fallback: copy to clipboard
+      const winner = rankings[0];
+      const shareText = `🎉 250 Card Game Results!\n\n🏆 Winner: ${winner.player.name} with ${winner.totalPoints} points!\n\n📊 Final Standings:\n${rankings.slice(0, 3).map((entry, index) => `${index + 1}. ${entry.player.name} - ${entry.totalPoints} pts`).join('\n')}\n\n🎮 ${totalMatches} matches played at ${gameData?.location || 'Game Night'}`;
+      
+      navigator.clipboard.writeText(shareText).then(() => {
+        alert('Results copied to clipboard!');
+      }).catch(() => {
+        alert('Unable to copy results');
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4 flex items-center justify-center">
+        <Card className="bg-white/95 shadow-xl max-w-md w-full">
+          <CardContent className="p-6 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading final results...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4 flex items-center justify-center">
-      <Card className="bg-white/95 shadow-xl max-w-md w-full">
-        <CardContent className="p-6 text-center">
-          <h2 className="text-xl font-bold mb-4">End Game</h2>
-          <p className="text-gray-600 mb-4">This feature will be implemented next.</p>
-          <Button onClick={() => setCurrentScreen('mainGame')}>Back to Main</Button>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4">
+      {showConfetti && (
+        <div className="fixed inset-0 pointer-events-none z-50">
+          <div className="absolute inset-0 bg-gradient-to-br from-yellow-400/20 to-red-400/20 animate-pulse" />
+          {/* Simple confetti effect */}
+          {Array.from({ length: 50 }).map((_, i) => (
+            <div
+              key={i}
+              className="absolute animate-bounce"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 2}s`,
+                animationDuration: `${1 + Math.random()}s`
+              }}
+            >
+              🎉
+            </div>
+          ))}
+        </div>
+      )}
+      
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="flex items-center justify-between text-white">
+          {!gameEnded && (
+            <Button
+              variant="ghost"
+              className="text-white hover:bg-white/20"
+              onClick={() => setCurrentScreen('mainGame')}
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+          )}
+          <div className="text-center">
+            <h1 className="text-3xl font-bold">
+              {gameEnded ? '🎉 Game Completed!' : 'End Game'}
+            </h1>
+            <p className="text-green-200">Final Results</p>
+          </div>
+          <div className="w-20"></div>
+        </div>
+
+        {/* Top 3 Players with Podium */}
+        {rankings.length >= 3 && (
+          <Card className="bg-white/95 shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-center">🏆 Top 3 Players</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-end justify-center gap-4">
+                {/* 2nd Place */}
+                <div className="text-center">
+                  <Avatar className="w-16 h-16 mx-auto mb-2">
+                    <AvatarImage src={rankings[1]?.player.avatar} alt={rankings[1]?.player.name} />
+                    <AvatarFallback>{rankings[1]?.player.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="bg-gray-300 h-16 w-20 rounded-t-lg flex items-center justify-center mb-2">
+                    <span className="text-2xl font-bold text-gray-700">2</span>
+                  </div>
+                  <p className="font-semibold text-sm">{rankings[1]?.player.name}</p>
+                  <p className="text-xs text-gray-600">{rankings[1]?.totalPoints} pts</p>
+                </div>
+
+                {/* 1st Place */}
+                <div className="text-center">
+                  <Avatar className="w-20 h-20 mx-auto mb-2 ring-4 ring-yellow-400">
+                    <AvatarImage src={rankings[0]?.player.avatar} alt={rankings[0]?.player.name} />
+                    <AvatarFallback>{rankings[0]?.player.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="bg-yellow-400 h-24 w-24 rounded-t-lg flex items-center justify-center mb-2">
+                    <span className="text-3xl font-bold text-yellow-800">👑</span>
+                  </div>
+                  <p className="font-bold">{rankings[0]?.player.name}</p>
+                  <p className="text-sm text-yellow-600 font-semibold">{rankings[0]?.totalPoints} pts</p>
+                </div>
+
+                {/* 3rd Place */}
+                <div className="text-center">
+                  <Avatar className="w-16 h-16 mx-auto mb-2">
+                    <AvatarImage src={rankings[2]?.player.avatar} alt={rankings[2]?.player.name} />
+                    <AvatarFallback>{rankings[2]?.player.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="bg-orange-400 h-12 w-20 rounded-t-lg flex items-center justify-center mb-2">
+                    <span className="text-xl font-bold text-orange-800">3</span>
+                  </div>
+                  <p className="font-semibold text-sm">{rankings[2]?.player.name}</p>
+                  <p className="text-xs text-gray-600">{rankings[2]?.totalPoints} pts</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Complete Rankings */}
+        <Card className="bg-white/95 shadow-xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-600" />
+              Complete Rankings
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {rankings.map((entry, index) => (
+                <div
+                  key={entry.player.id}
+                  className={`flex items-center justify-between p-3 rounded-lg ${
+                    index === 0 ? 'bg-yellow-50 border border-yellow-200' :
+                    index === 1 ? 'bg-gray-50 border border-gray-200' :
+                    index === 2 ? 'bg-orange-50 border border-orange-200' : 'bg-white border border-gray-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-lg font-bold w-8">#{index + 1}</span>
+                    <Avatar className="w-10 h-10">
+                      <AvatarImage src={entry.player.avatar} alt={entry.player.name} />
+                      <AvatarFallback>{entry.player.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">{entry.player.name}</p>
+                      <p className="text-xs text-gray-600">{entry.matchesWon}W / {entry.matchesLost}L</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-green-600">{entry.totalPoints}</p>
+                    <p className="text-xs text-gray-500">points</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Game Statistics */}
+        <Card className="bg-white/95 shadow-xl">
+          <CardHeader>
+            <CardTitle>Game Statistics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div>
+                <p className="text-2xl font-bold text-blue-600">{totalMatches}</p>
+                <p className="text-sm text-gray-600">Total Matches</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-green-600">{selectedPlayers.length}</p>
+                <p className="text-sm text-gray-600">Players</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-purple-600">{gameData?.location || 'Unknown'}</p>
+                <p className="text-sm text-gray-600">Location</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-orange-600">
+                  {new Date(gameData?.date).toLocaleDateString() || 'Today'}
+                </p>
+                <p className="text-sm text-gray-600">Date</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Action Buttons */}
+        <div className="space-y-3">
+          {!gameEnded && (
+            <Button 
+              className="w-full bg-red-600 hover:bg-red-700 h-12 text-lg"
+              onClick={handleEndGame}
+            >
+              🏁 End Game & Finalize Results
+            </Button>
+          )}
+
+          {gameEnded && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <Button 
+                  className="bg-blue-600 hover:bg-blue-700 h-12"
+                  onClick={exportToPDF}
+                >
+                  📄 Export Results
+                </Button>
+                <Button 
+                  className="bg-green-600 hover:bg-green-700 h-12"
+                  onClick={shareResults}
+                >
+                  📤 Share Results
+                </Button>
+              </div>
+              
+              <Button 
+                className="w-full bg-purple-600 hover:bg-purple-700 h-12 text-lg"
+                onClick={() => {
+                  setCurrentScreen('setup');
+                  window.location.reload(); // Reset the entire app state
+                }}
+              >
+                🎮 Start New Game
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
