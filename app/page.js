@@ -901,16 +901,181 @@ const ModifyPlayersScreen = () => {
 };
 
 const ViewTotalsScreen = () => {
-  const { setCurrentScreen } = useGame();
+  const { setCurrentScreen, gameData } = useGame();
+  const [rankings, setRankings] = useState([]);
+  const [totalMatches, setTotalMatches] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [showMatchHistory, setShowMatchHistory] = useState(false);
+
+  useEffect(() => {
+    if (gameData?.id) {
+      fetchTotals();
+    }
+  }, [gameData]);
+
+  const fetchTotals = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/games/${gameData.id}/totals`);
+      if (response.ok) {
+        const data = await response.json();
+        setRankings(data.rankings || []);
+        setTotalMatches(data.totalMatches || 0);
+      } else {
+        console.error('Failed to fetch totals');
+      }
+    } catch (error) {
+      console.error('Error fetching totals:', error);
+    }
+    setLoading(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4 flex items-center justify-center">
+        <Card className="bg-white/95 shadow-xl max-w-md w-full">
+          <CardContent className="p-6 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading totals...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4 flex items-center justify-center">
-      <Card className="bg-white/95 shadow-xl max-w-md w-full">
-        <CardContent className="p-6 text-center">
-          <h2 className="text-xl font-bold mb-4">View Totals</h2>
-          <p className="text-gray-600 mb-4">This feature will be implemented next.</p>
-          <Button onClick={() => setCurrentScreen('mainGame')}>Back to Main</Button>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4">
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="flex items-center justify-between text-white">
+          <Button
+            variant="ghost"
+            className="text-white hover:bg-white/20"
+            onClick={() => setCurrentScreen('mainGame')}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back
+          </Button>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold">Current Standings</h1>
+            <p className="text-green-200">{totalMatches} matches played</p>
+          </div>
+          <div className="w-20"></div>
+        </div>
+
+        <Card className="bg-white/95 shadow-xl">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-yellow-600" />
+                Player Rankings
+              </CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowMatchHistory(!showMatchHistory)}
+              >
+                {showMatchHistory ? 'Hide History' : 'Show History'}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {rankings.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Trophy className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No matches played yet</p>
+                <p className="text-sm">Start a new match to see rankings</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {rankings.map((entry, index) => (
+                  <div
+                    key={entry.player.id}
+                    className={`flex items-center justify-between p-4 rounded-lg border-2 ${
+                      index === 0
+                        ? 'border-yellow-300 bg-yellow-50'
+                        : index === 1
+                        ? 'border-gray-300 bg-gray-50'
+                        : index === 2
+                        ? 'border-orange-300 bg-orange-50'
+                        : 'border-gray-200 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-2xl font-bold ${
+                          index === 0 ? 'text-yellow-600' :
+                          index === 1 ? 'text-gray-600' :
+                          index === 2 ? 'text-orange-600' : 'text-gray-800'
+                        }`}>
+                          #{index + 1}
+                        </span>
+                        {index < 3 && (
+                          <Trophy className={`w-5 h-5 ${
+                            index === 0 ? 'text-yellow-500' :
+                            index === 1 ? 'text-gray-400' : 'text-orange-500'
+                          }`} />
+                        )}
+                      </div>
+                      <Avatar className="w-12 h-12">
+                        <AvatarImage src={entry.player.avatar} alt={entry.player.name} />
+                        <AvatarFallback>{entry.player.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-semibold">{entry.player.name}</p>
+                        <p className="text-sm text-gray-600">
+                          {entry.matchesWon}W / {entry.matchesLost}L
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-green-600">
+                        {entry.totalPoints}
+                      </p>
+                      <p className="text-sm text-gray-500">points</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {showMatchHistory && gameData?.matches && gameData.matches.length > 0 && (
+          <Card className="bg-white/95 shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Match History
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {gameData.matches.slice().reverse().map((match) => (
+                  <div key={match.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary">Match {match.matchNumber}</Badge>
+                      <div className="flex items-center gap-2">
+                        <Crown className="w-4 h-4 text-yellow-600" />
+                        <span className="font-medium">{match.bidder.name}</span>
+                        <span className="text-sm text-gray-500">
+                          + {match.partners.map(p => p.name).join(', ')}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Target className="w-4 h-4" />
+                      <span className="font-medium">{match.bidAmount}</span>
+                      <Badge className={match.won ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                        {match.won ? 'WON' : 'LOST'}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 };
