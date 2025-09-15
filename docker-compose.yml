@@ -6,7 +6,7 @@ services:
     container_name: cardgame-postgres
     restart: unless-stopped
     ports:
-      - "5433:5432"
+      - "5435:5432"
     environment:
       POSTGRES_DB: cardgame
       POSTGRES_USER: postgres
@@ -21,10 +21,26 @@ services:
     container_name: cardgame-pgadmin
     restart: unless-stopped
     ports:
-      - "8081:80"
+      - "8085:80"
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@cardgame.com
       PGADMIN_DEFAULT_PASSWORD: admin123
+    depends_on:
+      - postgres
+    networks:
+      - cardgame-network
+
+  app:
+    build: .
+    container_name: cardgame-app
+    restart: unless-stopped
+    ports:
+      - "3005:3005"
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      DATABASE_URL: postgresql://postgres:password123@postgres:5432/cardgame?schema=public
+      NEXT_PUBLIC_BASE_URL: http://localhost:3005
     depends_on:
       - postgres
     networks:
