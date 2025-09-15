@@ -40,7 +40,7 @@ services:
       NODE_ENV: production
       PORT: 3005
       DATABASE_URL: postgresql://postgres:password123@postgres:5432/cardgame?schema=public
-      NEXT_PUBLIC_BASE_URL: http://localhost:3005
+      NEXT_PUBLIC_BASE_URL: https://250.dil.bar
     depends_on:
       - postgres
     networks:
