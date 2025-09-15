@@ -127,7 +127,7 @@ backend:
     status_history:
         - working: true
           agent: "testing"
-          comment: "✅ All location management endpoints working correctly. GET /api/locations returns default locations (Farmhouse, Atishay's Home, Tisha's Home) plus custom locations. POST /api/locations creates custom locations with proper validation (name length ≥2, no duplicates). Tested with 3 custom locations successfully."
+          comment: "✅ All location management endpoints working correctly. GET /api/locations returns default locations (Farmhouse, Rahul's Home, Tisha's Home) plus custom locations. POST /api/locations creates custom locations with proper validation (name length ≥2, no duplicates). Tested with 3 custom locations successfully."
 
   - task: "Game Management API"
     implemented: true

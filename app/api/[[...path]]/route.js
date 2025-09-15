@@ -25,10 +25,13 @@ const gameRoutes = {
                 player: true
               }
             }
-          }
+          },
+          orderBy: { matchNumber: 'desc' },
+          take: 5
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: 10
     });
     return NextResponse.json({ games });
   },
@@ -188,7 +191,7 @@ const gameRoutes = {
         });
       }
     } else {
-      // Bidder and partners get 0, non-partners get bid amount
+      // Bidder and partners get 0, each non-partner gets full bid amount
       scores.push({ playerId: bidder.id, score: 0 });
       partners.forEach(partner => {
         scores.push({ playerId: partner.id, score: 0 });
@@ -255,7 +258,9 @@ const gameRoutes = {
                 player: true
               }
             }
-          }
+          },
+          orderBy: { matchNumber: 'desc' },
+          take: 15
         }
       }
     });
@@ -305,17 +310,16 @@ const gameRoutes = {
       match.scores.forEach(score => {
         if (totals[score.player.id]) {
           totals[score.player.id].totalPoints += score.score;
-          
-          // Track wins/losses for bidder and partners
-          const isBidderOrPartner = score.player.id === match.bidder.id || 
+
+          const isOnBidderTeam = score.player.id === match.bidder.id ||
             match.partners.some(p => p.player.id === score.player.id);
-          
-          if (isBidderOrPartner) {
-            if (match.won) {
-              totals[score.player.id].matchesWon++;
-            } else {
-              totals[score.player.id].matchesLost++;
-            }
+          const isOnChallengerTeam = !isOnBidderTeam; // all others in the match
+
+          const playerWon = (match.won && isOnBidderTeam) || (!match.won && isOnChallengerTeam);
+          if (playerWon) {
+            totals[score.player.id].matchesWon++;
+          } else {
+            totals[score.player.id].matchesLost++;
           }
         }
       });
@@ -343,7 +347,8 @@ const playerRoutes = {
   // Get all players
   'GET /api/players': async () => {
     const players = await prisma.player.findMany({
-      orderBy: { name: 'asc' }
+      orderBy: { name: 'asc' },
+      take: 50
     });
     return NextResponse.json({ players });
   },
@@ -390,6 +395,159 @@ const playerRoutes = {
     });
     
     return NextResponse.json({ player: newPlayer });
+  },
+
+  // Get player statistics
+  'GET /api/players/:playerId/stats': async (request, playerId) => {
+    try {
+      // Get all matches where this player participated
+      const matches = await prisma.match.findMany({
+        where: {
+          OR: [
+            { bidderId: playerId },
+            { 
+              partners: {
+                some: { playerId: playerId }
+              }
+            },
+            {
+              scores: {
+                some: { playerId: playerId }
+              }
+            }
+          ]
+        },
+        include: {
+          bidder: true,
+          partners: {
+            include: {
+              player: true
+            }
+          },
+          scores: {
+            include: {
+              player: true
+            }
+          },
+          game: {
+            select: {
+              location: true,
+              date: true
+            }
+          }
+        },
+        orderBy: { timestamp: 'desc' }
+      });
+
+      // Get player info
+      const player = await prisma.player.findUnique({
+        where: { id: playerId }
+      });
+
+      if (!player) {
+        return NextResponse.json({ error: 'Player not found' }, { status: 404 });
+      }
+
+      // Calculate statistics
+      const totalMatches = matches.length;
+      const matchesAsBidder = matches.filter(match => match.bidderId === playerId).length;
+      const matchesAsPartner = matches.filter(match => 
+        match.partners.some(p => p.playerId === playerId)
+      ).length;
+      
+      const wonMatches = matches.filter(match => {
+        const isBidderOrPartner = match.bidderId === playerId || 
+          match.partners.some(p => p.playerId === playerId);
+        return isBidderOrPartner && match.won;
+      }).length;
+      
+      const lostMatches = matches.filter(match => {
+        const isBidderOrPartner = match.bidderId === playerId || 
+          match.partners.some(p => p.playerId === playerId);
+        return isBidderOrPartner && !match.won;
+      }).length;
+
+      const totalPoints = matches.reduce((total, match) => {
+        const playerScore = match.scores.find(score => score.playerId === playerId);
+        return total + (playerScore ? playerScore.score : 0);
+      }, 0);
+
+      const averagePoints = totalMatches > 0 ? Math.round(totalPoints / totalMatches) : 0;
+
+      // Calculate win rate
+      const winRate = totalMatches > 0 ? Math.round((wonMatches / totalMatches) * 100) : 0;
+
+      // Get highest bid
+      const highestBid = Math.max(...matches
+        .filter(match => match.bidderId === playerId)
+        .map(match => match.bidAmount), 0);
+
+      // Get most played location
+      const locationCounts = {};
+      matches.forEach(match => {
+        const location = match.game.location;
+        locationCounts[location] = (locationCounts[location] || 0) + 1;
+      });
+      const mostPlayedLocation = Object.keys(locationCounts).reduce((a, b) => 
+        locationCounts[a] > locationCounts[b] ? a : b, 'N/A'
+      );
+
+      // Get recent performance (last 5 matches where player was bidder/partner)
+      const recentMatches = matches.filter(match => {
+        const isBidderOrPartner = match.bidderId === playerId || 
+          match.partners.some(p => p.playerId === playerId);
+        return isBidderOrPartner;
+      }).slice(0, 5);
+      
+      const recentWins = recentMatches.filter(match => match.won).length;
+
+      // 250 bid attempts and wins (as bidder only)
+      const bids250 = matches.filter(m => m.bidderId === playerId && m.bidAmount === 250).length;
+      const bids250Won = matches.filter(m => m.bidderId === playerId && m.bidAmount === 250 && m.won).length;
+
+      const stats = {
+        player,
+        totalMatches,
+        matchesAsBidder,
+        matchesAsPartner,
+        wonMatches,
+        lostMatches,
+        totalPoints,
+        averagePoints,
+        winRate,
+        highestBid,
+        mostPlayedLocation,
+        bids250,
+        bids250Won,
+        recentPerformance: {
+          matches: recentMatches.length,
+          wins: recentWins,
+          winRate: recentMatches.length > 0 ? Math.round((recentWins / recentMatches.length) * 100) : 0
+        },
+        matches: matches.slice(0, 10).map(match => {
+          const isBidder = match.bidderId === playerId;
+          const isPartner = match.partners.some(p => p.playerId === playerId);
+          const role = isBidder ? 'BIDDER' : (isPartner ? 'PARTNER' : 'NON_PARTNER');
+          return ({
+            id: match.id,
+            matchNumber: match.matchNumber,
+            bidder: match.bidder.name,
+            partners: match.partners.map(p => p.player.name),
+            bidAmount: match.bidAmount,
+            won: match.won,
+            role,
+            playerScore: match.scores.find(s => s.playerId === playerId)?.score || 0,
+            location: match.game.location,
+            date: match.timestamp
+          });
+        })
+      };
+
+      return NextResponse.json({ stats });
+    } catch (error) {
+      console.error('Error fetching player stats:', error);
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    }
   }
 };
 
@@ -402,7 +560,7 @@ const locationRoutes = {
     });
     
     // Default locations
-    const defaultLocations = ['Farmhouse', 'Atishay\'s Home', 'Tisha\'s Home'];
+    const defaultLocations = ['Farmhouse', 'Rahul\'s Home', 'Tisha\'s Home'];
     const customLocations = locations.map(loc => loc.name);
     
     // Combine and remove duplicates
@@ -474,6 +632,9 @@ export async function GET(request, { params }) {
       }
       if (segments[0] === 'games' && segments[1] && !segments[2]) {
         return await gameRoutes['GET /api/games/:gameId'](request, segments[1]);
+      }
+      if (segments[0] === 'players' && segments[1] && segments[2] === 'stats') {
+        return await playerRoutes['GET /api/players/:playerId/stats'](request, segments[1]);
       }
     }
     

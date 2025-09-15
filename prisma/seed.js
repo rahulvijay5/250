@@ -8,7 +8,7 @@ async function main() {
   // Create default locations
   const locations = [
     'Farmhouse',
-    'Atishay\'s Home', 
+    'Rahul\'s Home', 
     'Tisha\'s Home'
   ]
 

@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Search, Plus, Users, Trophy, FileText, Settings, ArrowLeft, Crown, Target, Gamepad2 } from 'lucide-react';
+import { Search, Plus, Users, Trophy, FileText, Settings, ArrowLeft, Crown, Target, Gamepad2, User, TrendingUp, Award, Calendar, MapPin, BarChart3, Share2, Copy } from 'lucide-react';
 import Confetti from 'react-confetti';
 import { useRouter } from 'next/navigation';
 
@@ -23,6 +23,67 @@ const GameProvider = ({ children }) => {
   const [locations, setLocations] = useState([]);
   const [selectedPlayers, setSelectedPlayers] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Load existing game if gameId is in URL, or go to setup if newGame=true
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const gameId = urlParams.get('gameId');
+    const newGame = urlParams.get('newGame');
+    
+    if (gameId) {
+      loadExistingGame(gameId);
+    } else if (newGame === 'true') {
+      // Clear URL parameters and go to setup
+      window.history.replaceState({}, '', '/');
+      setCurrentScreen('setup');
+    }
+  }, []);
+
+  const loadExistingGame = async (gameId) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/games/${gameId}`);
+      if (response.ok) {
+        const data = await response.json();
+        const game = data.game;
+        
+        // Set game data
+        setGameData(game);
+        
+        // Set selected players from game
+        const gamePlayers = game.players.map(gp => gp.player);
+        setSelectedPlayers(gamePlayers);
+        
+        // Set location
+        setSelectedLocation(game.location);
+        
+        // Go directly to main game
+        setCurrentScreen('mainGame');
+      } else {
+        console.error('Failed to load game');
+        // Fallback to setup if game not found
+        setCurrentScreen('setup');
+      }
+    } catch (error) {
+      console.error('Error loading game:', error);
+      setCurrentScreen('setup');
+    }
+    setLoading(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4 flex items-center justify-center">
+        <Card className="bg-white/95 shadow-xl max-w-md w-full">
+          <CardContent className="p-6 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading game...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <GameContext.Provider value={{
@@ -52,6 +113,25 @@ const GameSetupScreen = () => {
   const [newLocationName, setNewLocationName] = useState('');
   const [showAddLocation, setShowAddLocation] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showGameSelection, setShowGameSelection] = useState(false);
+
+  React.useEffect(() => {
+    // Check if there's a gameId in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const gameId = urlParams.get('gameId');
+    
+    if (gameId) {
+      setShowGameSelection(false);
+    } else {
+      // Check if user has visited before
+      const hasVisited = localStorage.getItem('hasVisited250Game');
+      if (hasVisited) {
+        setShowGameSelection(false);
+      } else {
+        setShowGameSelection(true);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     fetchLocations();
@@ -104,12 +184,32 @@ const GameSetupScreen = () => {
     }
   };
 
+  const handleBackToGameSelection = () => {
+    // Clear URL parameters and show game selection
+    window.history.pushState({}, "", "/");
+    setShowGameSelection(true);
+  };
+
+  if (showGameSelection) {
+    return <GameSelectionScreen />;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4">
       <div className="max-w-md mx-auto space-y-6">
-        <div className="text-center text-white mb-8">
-          <h1 className="text-3xl font-bold mb-2">250 Card Game</h1>
-          <p className="text-green-200">Setup New Game</p>
+        <div className="flex items-center justify-between text-white mb-8">
+          <Button
+            variant="ghost"
+            className="text-white hover:bg-white/20"
+            onClick={() => window.location.href = '/'}
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold">250 Card Game</h1>
+            <p className="text-green-200">Setup New Game</p>
+          </div>
+          <div className="w-20"></div>
         </div>
 
         <Card className="bg-white/95 shadow-xl">
@@ -174,13 +274,23 @@ const GameSetupScreen = () => {
               </div>
             </div>
 
-            <Button 
-              className="w-full bg-green-600 hover:bg-green-700"
-              onClick={handleContinue}
-              disabled={!selectedLocation}
-            >
-              Continue to Player Selection
-            </Button>
+            <div className="flex flex-col w-full gap-3">
+              <Button 
+                className="flex-1 bg-green-600 hover:bg-green-700"
+                onClick={handleContinue}
+                disabled={!selectedLocation}
+              >
+                Continue to Player Selection
+              </Button>
+              <Button 
+                variant="outline"
+                className="flex-1"
+                onClick={() => setCurrentScreen('playerProfiles')}
+              >
+                <User className="w-4 h-4 mr-2" />
+                Player Profiles
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -266,7 +376,7 @@ const PlayerSelectionScreen = () => {
           <Button
             variant="ghost"
             className="text-white hover:bg-white/20"
-            onClick={() => setCurrentScreen('setup')}
+            onClick={() => window.location.href = '/?newGame=true'}
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
@@ -529,6 +639,35 @@ const PartnershipConfirmationScreen = () => {
 // Main Game Screen
 const MainGameScreen = () => {
   const { setCurrentScreen, gameData, selectedPlayers } = useGame();
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [shareLink, setShareLink] = useState('');
+
+  const handleShareGame = () => {
+    if (gameData?.id) {
+      const link = `${window.location.origin}/?gameId=${gameData.id}`;
+      setShareLink(link);
+      setShowShareDialog(true);
+    }
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      alert('Game link copied to clipboard!');
+      setShowShareDialog(false);
+    } catch (err) {
+      console.error('Failed to copy: ', err);
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = shareLink;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      alert('Game link copied to clipboard!');
+      setShowShareDialog(false);
+    }
+  };
 
   const menuItems = [
     {
@@ -555,11 +694,23 @@ const MainGameScreen = () => {
     <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4">
       <div className="max-w-2xl mx-auto space-y-6 flex flex-col h-[90vh] justify-between">
         <div className="text-center text-white">
-          <h1 className="text-3xl font-bold mb-2">250 Card Game</h1>
-          <p className="text-green-200">
-            {/* {selectedPlayers.length} Players • {gameData?.matches?.length || 0} Matches Played */}
-            {selectedPlayers.length} Players
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-20"></div>
+            <div>
+              <h1 className="text-3xl font-bold mb-2">250 Card Game</h1>
+              <p className="text-green-200">
+                {gameData?.location} • {selectedPlayers.length} players
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              className="text-white hover:bg-white/20"
+              onClick={handleShareGame}
+              title="Share Game"
+            >
+              <Share2 className="w-6 h-6" />
+            </Button>
+          </div>
         </div>
 
         {/* Main New Match Button */}
@@ -599,7 +750,7 @@ const MainGameScreen = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {gameData.matches.slice(-3).reverse().map((match, index) => (
+                {gameData.matches.slice(-3).reverse().slice(0, 5).map((match, index) => (
                   <div key={match.id} className="flex items-center justify-between p-3 bg-green-700 rounded-lg">
                     <div className="flex items-center gap-3">
                       <Badge variant="secondary">Match {match.matchNumber}</Badge>
@@ -620,6 +771,44 @@ const MainGameScreen = () => {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Share Dialog */}
+        {showShareDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <Card className="bg-white shadow-xl max-w-md w-full mx-4">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Share2 className="w-5 h-5" />
+                  Share Game
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Share this link with other players to let them join your game:
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={shareLink}
+                    readOnly
+                    className="flex-1"
+                  />
+                  <Button onClick={copyToClipboard} size="sm">
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => setShowShareDialog(false)}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Close
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
       </div>
     </div>
@@ -697,12 +886,16 @@ const NewMatchScreen = () => {
       });
 
       if (response.ok) {
-        // // Refresh game data to get updated match count
-        // const gameResponse = await fetch(`/api/games/${gameData.id}`);
-        // if (gameResponse.ok) {
-        //   const gameData = await gameResponse.json();
-        //   setGameData(gameData.game);
-        // }
+        // Refresh game data to get updated matches count and display
+        try {
+          const gameResponse = await fetch(`/api/games/${gameData.id}`);
+          if (gameResponse.ok) {
+            const latest = await gameResponse.json();
+            setGameData(latest.game);
+          }
+        } catch (e) {
+          console.error('Error refreshing game after match:', e);
+        }
         setCurrentScreen('mainGame');
       } else {
         alert('Failed to record match');
@@ -874,12 +1067,12 @@ const NewMatchScreen = () => {
   <CardHeader>
     <CardTitle className="flex items-center gap-2">
       <Target className="w-5 h-5 text-green-600" />
-      Bid Amount
+      Team:
     </CardTitle>
   </CardHeader>
   <CardContent className="space-y-6">
     <div className="text-center p-4 bg-gray-50 rounded-lg">
-      <p className="text-sm text-gray-600 mb-3">Team:</p>
+      {/* <p className="text-sm text-gray-600 mb-3">Team:</p> */}
       
       {/* Team Avatars */}
       <div className="flex justify-center items-center mb-3">
@@ -1489,6 +1682,11 @@ const ViewTotalsScreen = () => {
               <CardTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5" />
                 Match History
+                {matches && matches.length > 10 && (
+                  <Badge variant="outline" className="ml-2 text-xs">
+                    Showing last 10 of {matches.length}
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -1506,7 +1704,7 @@ const ViewTotalsScreen = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {matches.slice().reverse().map((match) => (
+                      {matches.slice().reverse().slice(0, 10).map((match) => (
                         <tr key={match.id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="py-3 px-3">
                             <Badge variant="secondary">#{match.matchNumber}</Badge>
@@ -1574,6 +1772,391 @@ const ViewTotalsScreen = () => {
             </CardContent>
           </Card>
         )}
+      </div>
+    </div>
+  );
+};
+
+// Player Profile Screen
+const PlayerProfileScreen = () => {
+  const { setCurrentScreen } = useGame();
+  const [allPlayers, setAllPlayers] = useState([]);
+  const [selectedPlayer, setSelectedPlayer] = useState(null);
+  const [playerStats, setPlayerStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [showPlayerSelector, setShowPlayerSelector] = useState(true);
+
+  useEffect(() => {
+    fetchAllPlayers();
+  }, []);
+
+  const fetchAllPlayers = async () => {
+    try {
+      const response = await fetch('/api/players');
+      if (response.ok) {
+        const data = await response.json();
+        setAllPlayers(data.players || []);
+      }
+    } catch (error) {
+      console.error('Error fetching players:', error);
+    }
+  };
+
+  const fetchPlayerStats = async (playerId) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/players/${playerId}/stats`);
+      if (response.ok) {
+        const data = await response.json();
+        setPlayerStats(data.stats);
+        setShowPlayerSelector(false);
+      } else {
+        console.error('Failed to fetch player stats');
+        alert('Failed to fetch player statistics');
+      }
+    } catch (error) {
+      console.error('Error fetching player stats:', error);
+      alert('Failed to fetch player statistics');
+    }
+    setLoading(false);
+  };
+
+  const handlePlayerSelect = (player) => {
+    setSelectedPlayer(player);
+    fetchPlayerStats(player.id);
+  };
+
+  const handleBack = () => {
+    if (showPlayerSelector) {
+      setCurrentScreen('setup');
+    } else {
+      setShowPlayerSelector(true);
+      setPlayerStats(null);
+      setSelectedPlayer(null);
+    }
+  };
+
+  if (showPlayerSelector) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4">
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="flex items-center justify-between text-white">
+            <Button
+              variant="ghost"
+              className="text-white hover:bg-white/20"
+              onClick={() => setCurrentScreen('mainGame')}
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div className="text-center">
+              <h1 className="text-2xl font-bold">Player Profiles</h1>
+              <p className="text-green-200">Select a player to view their statistics</p>
+            </div>
+            <div className="w-20"></div>
+          </div>
+
+          <Card className="bg-white/95 shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="w-5 h-5" />
+                Choose Player
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4">
+                {allPlayers.length > 0 ? (
+                  allPlayers.map((player) => (
+                    <div
+                      key={player.id}
+                      className="cursor-pointer p-4 rounded-lg border-2 border-gray-200 hover:border-green-400 transition-all"
+                      onClick={() => handlePlayerSelect(player)}
+                    >
+                      <div className="flex flex-col items-center space-y-2">
+                        <Avatar className="w-16 h-16">
+                          <AvatarImage src={player.avatar} alt={player.name} />
+                          <AvatarFallback>{player.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-sm font-medium text-center">{player.name}</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-2 text-center py-8">
+                    <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">No players found</p>
+                    <p className="text-sm text-gray-500">Players will appear here once they are added to games</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4 flex items-center justify-center">
+        <Card className="bg-white/95 shadow-xl max-w-md w-full">
+          <CardContent className="p-6 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading player statistics...</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!playerStats) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4 flex items-center justify-center">
+        <Card className="bg-white/95 shadow-xl max-w-md w-full">
+          <CardContent className="p-6 text-center">
+            <p className="text-gray-600">No player statistics available</p>
+            <Button 
+              className="mt-4" 
+              onClick={() => setShowPlayerSelector(true)}
+            >
+              Back to Player Selection
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4">
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex items-center justify-between text-white">
+          <Button
+            variant="ghost"
+            className="text-white hover:bg-white/20"
+            onClick={handleBack}
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold">Player Profile</h1>
+            <p className="text-green-200">{playerStats.player.name}</p>
+          </div>
+          <div className="w-20"></div>
+        </div>
+
+        {/* Player Header */}
+        <Card className="bg-white/95 shadow-xl">
+          <CardContent className="p-6">
+              <Avatar className="w-24 h-24 border-4 border-green-400">
+                <AvatarImage src={playerStats.player.avatar} alt={playerStats.player.name} />
+                <AvatarFallback className="text-2xl font-bold">
+                  {playerStats.player.name.slice(0, 2).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+            <div className="flex items-center gap-6">
+              <div className="flex-1">
+                <h2 className="text-3xl font-bold text-gray-800">{playerStats.player.name}</h2>
+                <div className="flex flex-col gap-2 mt-4">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-yellow-500" />
+                    <span className="text-lg font-semibold text-gray-700">
+                      {playerStats.totalPoints} Total Points
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-green-500" />
+                    <span className="text-lg font-semibold text-gray-700">
+                      {playerStats.winRate}% Win Rate
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Statistics Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Total Matches */}
+          <Card className="bg-white/95 shadow-xl">
+            <CardContent className="p-6 flex items-center justify-between text-center">
+              <div className='w-full'>
+
+              <div className="flex items-center justify-center mb-4">
+                <BarChart3 className="w-8 h-8 text-blue-500" />
+              </div>
+              <div className="text-3xl font-bold text-blue-600 mb-2">{playerStats.totalMatches}</div>
+              <p className="text-sm text-gray-600">Total Matches</p>
+              </div>
+
+              <div className='w-full'>
+              <div className="flex items-center justify-center mb-4">
+                <Award className="w-8 h-8 text-green-500" />
+              </div>
+              <div className="text-3xl font-bold text-green-600 mb-2">
+                {playerStats.wonMatches}W / {playerStats.lostMatches}L
+              </div>
+              <p className="text-sm text-gray-600">Win/Loss Record</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Matches as Bidder */}
+          <Card className="bg-white/95 shadow-xl">
+            <CardContent className="p-6 text-center flex items-center justify-between">
+  <div className='w-full'>
+
+              <div className="flex items-center justify-center mb-4">
+                <Crown className="w-8 h-8 text-yellow-500" />
+              </div>
+              <div className="text-3xl font-bold text-yellow-600 mb-2">{playerStats.matchesAsBidder}</div>
+              <p className="text-sm text-gray-600">As Bidder</p>
+  </div>
+
+<div className='w-full'>
+
+              <div className="flex items-center justify-center mb-4">
+                <Users className="w-8 h-8 text-blue-500" />
+              </div>
+              <div className="text-3xl font-bold text-blue-600 mb-2">{playerStats.matchesAsPartner}</div>
+              <p className="text-sm text-gray-600">As Partner</p>
+</div>
+
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white/95 shadow-xl">
+            <CardContent className="p-6 flex justify-between items-center text-center">
+      <div className='w-full'>
+              <div className="flex items-center justify-center mb-4">
+                <TrendingUp className="w-8 h-8 text-purple-500" />
+              </div>
+              <div className="text-3xl font-bold text-purple-600 mb-2">{playerStats.averagePoints}</div>
+              <p className="text-sm text-gray-600">Avg Points/Match</p>
+</div>
+              <div className='w-full'>
+              <div className="flex items-center justify-center mb-4">
+                <Target className="w-8 h-8 text-red-500" />
+              </div>
+              <div className="text-3xl font-bold text-red-600 mb-2">{playerStats.highestBid}</div>
+              <p className="text-sm text-gray-600">Highest Bid</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 250 Bid Attempts and Wins */}
+          <Card className="bg-white/95 shadow-xl">
+            <CardContent className="p-6 text-center flex items-center justify-between">
+              <div className='w-full'>
+                <div className="flex items-center justify-center mb-4">
+                  <Crown className="w-8 h-8 text-yellow-500" />
+                </div>
+                <div className="text-3xl font-bold text-yellow-600 mb-2">{playerStats.bids250}</div>
+                <p className="text-sm text-gray-600">250 Bids (as Bidder)</p>
+              </div>
+              <div className='w-full'>
+                <div className="flex items-center justify-center mb-4">
+                  <Trophy className="w-8 h-8 text-green-500" />
+                </div>
+                <div className="text-3xl font-bold text-green-600 mb-2">{playerStats.bids250Won}</div>
+                <p className="text-sm text-gray-600">250 Bids Won</p>
+              </div>
+            </CardContent>
+          </Card>
+
+        </div>
+
+        {/* Additional Info */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Most Played Location */}
+          <Card className="bg-white/95 shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="w-5 h-5" />
+                Most Played Location
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold text-gray-800">{playerStats.mostPlayedLocation}</p>
+            </CardContent>
+          </Card>
+
+          {/* Recent Performance */}
+          <Card className="bg-white/95 shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="w-5 h-5" />
+                Recent Performance
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <p className="text-lg font-semibold text-gray-800">
+                  {playerStats.recentPerformance.wins}W / {playerStats.recentPerformance.matches - playerStats.recentPerformance.wins}L
+                </p>
+                <p className="text-sm text-gray-600">
+                  Last {playerStats.recentPerformance.matches} matches
+                </p>
+                <p className="text-sm text-gray-600">
+                  {playerStats.recentPerformance.winRate}% win rate
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Matches */}
+        <Card className="bg-white/95 shadow-xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5" />
+              Recent Matches
+              {/* {playerStats.matches.length > 8 && (
+                <Badge variant="outline" className="ml-2 text-xs">
+                  Showing last 8 of {playerStats.matches.length}
+                </Badge>
+              )} */}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {playerStats.matches.length === 0 ? (
+              <p className="text-center text-gray-500 py-8">No matches played yet</p>
+            ) : (
+              <div className="space-y-3">
+                {playerStats.matches.slice(0, 8).map((match) => (
+                  <div key={match.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary">#{match.matchNumber}</Badge>
+                      <div>
+                        <p className="font-medium">
+                          {match.role === 'BIDDER' ? 'Bidder' : match.role === 'PARTNER' ? 'Partner' : 'Other'}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {match.partners.length > 0 ? match.partners.join(', ') : 'Solo'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-center">
+                        <p className="font-bold">{match.bidAmount}</p>
+                        <p className="text-xs text-gray-500">Bid</p>
+                      </div>
+                      <div className="text-center">
+                        <p className={`font-bold ${match.playerScore > 0 ? 'text-green-600' : 'text-gray-500'}`}>
+                          {match.playerScore}
+                        </p>
+                        <p className="text-xs text-gray-500">Points</p>
+                      </div>
+                      <Badge className={match.won ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
+                        {match.won ? 'WON' : 'LOST'}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -1649,10 +2232,7 @@ const EndGameScreen = () => {
       location: gameData?.location || 'Unknown',
       date: new Date(gameData?.date).toLocaleDateString() || new Date().toLocaleDateString(),
       totalPlayers: selectedPlayers.length,
-      totalMatches: totalMatches,
-      duration: gameData?.matches?.length > 0 
-        ? `${Math.round((new Date() - new Date(gameData.date)) / (1000 * 60))} minutes`
-        : 'N/A'
+      totalMatches: totalMatches
     };
 
     // Create downloadable text file (PDF functionality would require a library like jsPDF)
@@ -1675,8 +2255,7 @@ const EndGameScreen = () => {
     report += `Location: ${stats.location}\n`;
     report += `Date: ${stats.date}\n`;
     report += `Players: ${stats.totalPlayers}\n`;
-    report += `Matches Played: ${stats.totalMatches}\n`;
-    report += `Duration: ${stats.duration}\n\n`;
+    report += `Matches Played: ${stats.totalMatches}\n\n`;
     
     report += `FINAL STANDINGS:\n`;
     report += `================\n`;
@@ -1694,13 +2273,16 @@ const EndGameScreen = () => {
       report += `------|--------|----------|-----|--------|--------\n`;
       
       matches.slice().reverse().forEach((match) => {
-        const partnerNames = match.partners.length > 0 ? match.partners.map(p => p.name).join(', ') : 'Solo';
+        const partnerNames = match.partners.length > 0 ? 
+          match.partners.map(p => p.player?.name || p.name).join(', ') : 'Solo';
         const result = match.won ? 'WON' : 'LOST';
         
-        // Get scores for this match
-        const scores = match.scores ? match.scores.map(score => 
-          `${score.player.name}: ${score.score}`
-        ).join(', ') : 'N/A';
+        // Get scores for this match - only players who got points
+        const scores = match.scores ? 
+          match.scores
+            .filter(score => score.score > 0)
+            .map(score => `${score.player.name}: ${score.score}`)
+            .join(', ') : 'N/A';
         
         report += `#${match.matchNumber} | ${match.bidder.name} | ${partnerNames} | ${match.bidAmount} | ${result} | ${scores}\n`;
       });
@@ -1980,6 +2562,8 @@ const GameRouter = () => {
         return <ModifyPlayersScreen />;
       case 'viewTotals':
         return <ViewTotalsScreen />;
+      case 'playerProfiles':
+        return <PlayerProfileScreen />;
       case 'endGame':
         return <EndGameScreen />;
       default:
@@ -1990,55 +2574,165 @@ const GameRouter = () => {
   return renderScreen();
 };
 
-// Main App Component (provides the context)
-const App = () => {
-  const router = useRouter();
-  const [showLanding, setShowLanding] = React.useState(true);
+// Game Selection Screen
+const GameSelectionScreen = () => {
+  const [games, setGames] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
-    // Check if user has visited before
-    const hasVisited = localStorage.getItem('hasVisited250Game');
-    if (hasVisited) {
-      setShowLanding(false);
-    }
+  useEffect(() => {
+    fetchGames();
   }, []);
 
-  const handleStartGame = () => {
-    localStorage.setItem('hasVisited250Game', 'true');
-    setShowLanding(false);
+  const fetchGames = async () => {
+    try {
+      const response = await fetch('/api/games');
+      if (response.ok) {
+        const data = await response.json();
+        setGames(data.games || []);
+      }
+    } catch (error) {
+      console.error('Error fetching games:', error);
+    }
+    setLoading(false);
   };
 
-  if (showLanding) {
+  const handleNewGame = () => {
+    // Navigate to game setup directly
+    window.location.href = '/?newGame=true';
+  };
+
+  const handleContinueGame = (game) => {
+    // Set the game data and go to main game
+    // This will be handled by the GameProvider
+    window.location.href = `/?gameId=${game.id}`;
+  };
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900">
-        <div className="container mx-auto px-4 py-8">
-          <div className="text-center text-white mb-12">
-            <h1 className="text-5xl font-bold mb-4 flex items-center justify-center gap-3">
-              <Gamepad2 className="w-12 h-12" />
-              250 Card Game
-            </h1>
-            <p className="text-xl text-green-200 max-w-2xl mx-auto">
-              The ultimate scoring app for the dynamic 250/Partner card game
-            </p>
-          </div>
-          <div className="text-center">
-            <Button 
-              onClick={handleStartGame}
-              size="lg"
-              className="bg-green-600 hover:bg-green-700 text-white text-xl px-12 py-6 rounded-full shadow-2xl transform hover:scale-105 transition-all duration-200"
-            >
-              <Gamepad2 className="w-6 h-6 mr-3" />
-              Let's Play!
-            </Button>
-          </div>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4 flex items-center justify-center">
+        <Card className="">
+          <CardContent className="p-6 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading games...</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
+    <div className="min-h-screen bg-gradient-to-br from-green-800 to-green-900 p-4">
+      <div className="max-w-2xl mx-auto space-y-6">
+        <div className="text-center text-white mb-8">
+          <h1 className="text-3xl font-bold mb-2">250 Card Game</h1>
+          <p className="text-green-200">Choose a game to continue or start new</p>
+        </div>
+
+        {/* New Game Button */}
+        <Card className="bg-white/95 shadow-xl">
+          <CardContent className="p-6">
+            <Button 
+              onClick={handleNewGame}
+              className="w-full bg-green-600 hover:bg-green-700 h-16 text-lg"
+            >
+              <Plus className="w-6 h-6 mr-3" />
+              Start New Game
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Existing Games */}
+        {games.length > 0 && (
+          <Card className="bg-white/95 shadow-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Continue Existing Games
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {games.map((game) => (
+                  <div 
+                    key={game.id} 
+                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                    onClick={() => handleContinueGame(game)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <Gamepad2 className="w-6 h-6 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-semibold">{game.location}</p>
+                        <p className="text-sm text-gray-600">
+                          {new Date(game.date).toLocaleDateString()} • {game.players?.length || 0} players
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {game.matches?.length || 0} matches played
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <Badge className={game.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}>
+                        {game.isActive ? 'Active' : 'Ended'}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Main App Component (provides the context)
+const App = () => {
+  const router = useRouter();
+  const [showGameSelection, setShowGameSelection] = useState(true);
+
+  React.useEffect(() => {
+    // Check if there's a gameId or newGame in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const gameId = urlParams.get('gameId');
+    const newGame = urlParams.get('newGame');
+    
+    if (gameId || newGame === 'true') {
+      setShowGameSelection(false);
+    } else {
+      setShowGameSelection(true);
+    }
+  }, []);
+
+  const handleBackToGameSelection = () => {
+    // Clear URL parameters and show game selection
+    window.history.pushState({}, '', '/');
+    setShowGameSelection(true);
+  };
+
+  if (showGameSelection) {
+    return <GameSelectionScreen />;
+  }
+
+  return (
     <GameProvider>
-      <GameRouter />
+      <div className="relative">
+        {/* Back to Game Selection Button */}
+        {/* <div className="fixed top-4 left-4 z-50">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBackToGameSelection}
+            className="bg-white/90 hover:bg-white shadow-lg"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            All Games
+          </Button>
+        </div> */}
+        <GameRouter />
+      </div>
     </GameProvider>
   );
 };

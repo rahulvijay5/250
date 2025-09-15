@@ -141,7 +141,7 @@ class CardGameAPITester:
             return False
         
         locations = data.get('locations', [])
-        default_locations = ['Farmhouse', 'Atishay\'s Home', 'Tisha\'s Home']
+        default_locations = ['Farmhouse', 'Rahul\'s Home', 'Tisha\'s Home']
         
         for default_loc in default_locations:
             if default_loc not in locations:
